@@ -87,9 +87,6 @@ class BrowserlessServer {
           scrollCount: z.number().optional().default(DEFAULTS.SCROLL_COUNT).describe('Number of times to scroll down the page'),
           scrollWaitTime: z.number().optional().default(DEFAULTS.SCROLL_WAIT).describe('Time to wait (in milliseconds) between each scroll action'),
         },
-        outputSchema: {
-          content: z.string().describe('The fully rendered DOM HTML content including all dynamically loaded elements'),
-        },
       },
       async (args) => this.handleWebContentRequest(args)
     );
@@ -105,7 +102,6 @@ class BrowserlessServer {
       
       return {
         content: [{ type: 'text' as const, text: content }],
-        structuredContent: { content },
       };
     } catch (error) {
       const errorMessage = this.formatError(error);
