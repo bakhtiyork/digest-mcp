@@ -52,13 +52,18 @@ node build/index.js
 
 ### Tool: web_content
 
-Fetches web page content with optional scrolling.
+Fetches web page content with optional scrolling and HTML cleanup.
 
 **Parameters:**
 - `url` (string, required): The URL to fetch
 - `initialWaitTime` (number, optional): Time to wait in milliseconds after loading the page. Default: 3000
-- `scrollCount` (number, optional): Number of times to scroll down the page. Default: 0
-- `scrollWaitTime` (number, optional): Time to wait in milliseconds between each scroll. Default: 3000
+- `scrolls` (number, optional): Number of times to scroll down the page. Default: 0
+- `scrollWaitTime` (number, optional): Time to wait in milliseconds between each scroll. Default: 1000
+- `cleanup` (boolean, optional): Whether to clean up HTML (remove scripts, styles, SVG, forms, etc.) and keep only meaningful text content. Default: false
+
+**Returns:**
+- `size` (number): Size of the content in bytes
+- `content` (string): The fetched HTML content
 
 **Example:**
 
@@ -66,8 +71,9 @@ Fetches web page content with optional scrolling.
 {
   "url": "https://example.com",
   "initialWaitTime": 2000,
-  "scrollCount": 3,
-  "scrollWaitTime": 1000
+  "scrolls": 3,
+  "scrollWaitTime": 1000,
+  "cleanup": true
 }
 ```
 
@@ -115,10 +121,12 @@ The tool is specifically designed for modern web applications with dynamic conte
 - Dynamic dashboards and admin panels
 
 **Tips for best results:**
-- Set `scrollCount` to 5-10 to load multiple pages of content
-- Use `scrollWaitTime` of 3000-5000ms for slow-loading content
+- Set `scrolls` to 5-10 to load multiple pages of content
+- Use `scrollWaitTime` of 1000-3000ms for slow-loading content (default: 1000ms)
 - Increase `initialWaitTime` to 5000+ if page has heavy initialization
 - For SPAs, allow time for initial JavaScript bootstrap
+- Use `cleanup: true` to extract only meaningful text content without scripts, styles, and visual elements
+- Use `cleanup: false` (default) to get the full rendered HTML
 
 ## MCP Client Configuration
 
