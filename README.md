@@ -2,6 +2,10 @@
 
 MCP server for web content digestion using [browserless.io](https://browserless.io) via puppeteer-core. Extracts fully rendered DOM content from dynamic web pages including SPAs and infinite scroll sites.
 
+<a href="https://glama.ai/mcp/servers/@bakhtiyork/digest-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@bakhtiyork/digest-mcp/badge" alt="Digest Server MCP server" />
+</a>
+
 ## Features
 
 - Connect to browserless.io cloud browsers
@@ -141,4 +145,3 @@ Add to your MCP client configuration (e.g., Claude Desktop):
 ## License
 
 ISC
-
