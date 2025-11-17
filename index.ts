@@ -7,6 +7,7 @@ import puppeteer from 'puppeteer-core';
 import type { Browser, Page } from 'puppeteer-core';
 import { z } from 'zod';
 import dotenv from 'dotenv';
+import * as cheerio from 'cheerio';
 
 // Load environment variables
 dotenv.config();
@@ -140,11 +141,12 @@ class BrowserlessServer {
       await this.performScrolling(page, scrollCount, scrollWaitTime);
       await this.waitForNetworkAndRendering(page, scrollCount, scrollWaitTime);
       
-      const content = await this.extractPageContent(page);
+      const rawContent = await this.extractPageContent(page);
+      const cleanedContent = this.cleanupHtml(rawContent);
       await this.closePage(page);
       
       log.info('Content fetched successfully');
-      return content;
+      return cleanedContent;
     } catch (error) {
       await this.closePage(page);
       throw error;
@@ -314,6 +316,83 @@ class BrowserlessServer {
         throw new Error(`Failed to extract page content: ${this.formatError(error)}`);
       }
     }
+  }
+
+  private cleanupHtml(html: string): string {
+    log.info('Cleaning up HTML content');
+    
+    const $ = cheerio.load(html);
+
+    // Remove <head> entirely
+    $('head').remove();
+
+    // Remove comments
+    $('*').contents().each((_, elem) => {
+      if (elem.type === 'comment') {
+        $(elem).remove();
+      }
+    });
+
+    // Remove script tags
+    $('script').remove();
+
+    // Remove style tags
+    $('style').remove();
+
+    // Remove noscript tags
+    $('noscript').remove();
+
+    // Remove frame, iframe, form, img, picture, and source elements
+    $('frame').remove();
+    $('iframe').remove();
+    $('form').remove();
+    $('img').remove();
+    $('picture').remove();
+    $('source').remove();
+
+    // Remove inline styles
+    $('[style]').removeAttr('style');
+
+    // Remove class attributes
+    $('[class]').removeAttr('class');
+
+    // Remove rel attributes
+    $('[rel]').removeAttr('rel');
+
+    // Remove tabindex attributes
+    $('[tabindex]').removeAttr('tabindex');
+
+    // Remove SVG and path elements
+    $('svg').remove();
+    $('path').remove();
+    $('circle').remove();
+    $('rect').remove();
+    $('polygon').remove();
+    $('polyline').remove();
+    $('line').remove();
+    $('ellipse').remove();
+    $('g').remove();
+    $('defs').remove();
+    $('clipPath').remove();
+    $('mask').remove();
+
+    // Remove data-*, aria-*, and on* attributes
+    $('*').each((_, elem) => {
+      const $elem = $(elem);
+      if (elem.type === 'tag' && 'attribs' in elem) {
+        const attrs = elem.attribs;
+        Object.keys(attrs).forEach(attr => {
+          if (attr.startsWith('data-') || attr.startsWith('aria-') || attr.startsWith('on')) {
+            $elem.removeAttr(attr);
+          }
+        });
+      }
+    });
+
+    const cleanedHtml = $.html();
+    log.info(`Cleaned HTML: ${html.length} -> ${cleanedHtml.length} characters`);
+    
+    return cleanedHtml;
   }
 
   private async closePage(page: Page | null): Promise<void> {

@@ -23,11 +23,13 @@
   "type": "module",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.22.0",
+    "cheerio": "^1.1.2",
     "dotenv": "^16.4.0",
     "puppeteer-core": "^24.30.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@types/cheerio": "^0.22.35",
     "@types/node": "^22.0.0",
     "typescript": "^5.0.0"
   }
