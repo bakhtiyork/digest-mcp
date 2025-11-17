@@ -57,7 +57,7 @@ Fetches web page content with optional scrolling and HTML cleanup.
 **Parameters:**
 - `url` (string, required): The URL to fetch
 - `initialWaitTime` (number, optional): Time to wait in milliseconds after loading the page. Default: 3000
-- `scrolls` (number, optional): Number of times to scroll down the page. Default: 0
+- `scrolls` (number, optional): Number of times to scroll down the page. Default: 5
 - `scrollWaitTime` (number, optional): Time to wait in milliseconds between each scroll. Default: 1000
 - `cleanup` (boolean, optional): Whether to clean up HTML (remove scripts, styles, SVG, forms, etc.) and keep only meaningful text content. Default: false
 
@@ -121,7 +121,9 @@ The tool is specifically designed for modern web applications with dynamic conte
 - Dynamic dashboards and admin panels
 
 **Tips for best results:**
-- Set `scrolls` to 5-10 to load multiple pages of content
+- Default `scrolls: 5` works well for most pages with lazy-loaded content
+- Increase `scrolls` to 10-15 for very long infinite scroll pages
+- Set `scrolls: 0` to disable scrolling for static pages
 - Use `scrollWaitTime` of 1000-3000ms for slow-loading content (default: 1000ms)
 - Increase `initialWaitTime` to 5000+ if page has heavy initialization
 - For SPAs, allow time for initial JavaScript bootstrap

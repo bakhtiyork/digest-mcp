@@ -31,7 +31,7 @@ const TIMEOUTS = {
 // Default Values
 const DEFAULTS = {
   INITIAL_WAIT: 3000,
-  SCROLL_COUNT: 0,
+  SCROLL_COUNT: 5,
   SCROLL_WAIT: 1000,
   CLEANUP_HTML: false,
 } as const;
