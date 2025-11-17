@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "digest": {
+      "command": "node",
+      "args": [
+        "digest-mcp/build/index.js"
+      ],
+      "env": {
+        "BROWSERLESS_API_KEY": "your_browserless_api_key_here"
+      }
+    }
+  }
+}
+
