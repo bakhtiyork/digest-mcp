@@ -48,7 +48,7 @@ if (!BROWSERLESS_API_KEY) {
 interface FetchWebContentArgs {
   url: string;
   initialWaitTime?: number;
-  scrollCount?: number;
+  scrolls?: number;
   scrollWaitTime?: number;
   cleanup?: boolean;
 }
@@ -66,7 +66,7 @@ class BrowserlessServer {
   constructor() {
     this.server = new McpServer({
       name: 'digest-mcp',
-      version: '1.0.0',
+      version: '0.1.0',
     });
 
     this.setupToolHandlers();
@@ -87,9 +87,13 @@ class BrowserlessServer {
         inputSchema: {
           url: z.string().describe('The URL to fetch'),
           initialWaitTime: z.number().optional().default(DEFAULTS.INITIAL_WAIT).describe('Time to wait (in milliseconds) after loading the page before scrolling'),
-          scrollCount: z.number().optional().default(DEFAULTS.SCROLL_COUNT).describe('Number of times to scroll down the page'),
+          scrolls: z.number().optional().default(DEFAULTS.SCROLL_COUNT).describe('Number of times to scroll down the page'),
           scrollWaitTime: z.number().optional().default(DEFAULTS.SCROLL_WAIT).describe('Time to wait (in milliseconds) between each scroll action'),
           cleanup: z.boolean().optional().default(DEFAULTS.CLEANUP_HTML).describe('Whether to clean up HTML (remove scripts, styles, SVG, forms, etc.) and keep only meaningful text content'),
+        },
+        outputSchema: {
+          size: z.number().describe('Size of the content in bytes'),
+          content: z.string().describe('The fetched HTML content'),
         },
       },
       async (args) => this.handleWebContentRequest(args)
@@ -103,9 +107,14 @@ class BrowserlessServer {
 
     try {
       const content = await this.fetchWebContent(args);
+      const size = Buffer.byteLength(content, 'utf8');
       
       return {
         content: [{ type: 'text' as const, text: content }],
+        structuredContent: {
+          size,
+          content,
+        },
       };
     } catch (error) {
       const errorMessage = this.formatError(error);
@@ -128,12 +137,12 @@ class BrowserlessServer {
     const {
       url,
       initialWaitTime = DEFAULTS.INITIAL_WAIT,
-      scrollCount = DEFAULTS.SCROLL_COUNT,
+      scrolls = DEFAULTS.SCROLL_COUNT,
       scrollWaitTime = DEFAULTS.SCROLL_WAIT,
       cleanup = DEFAULTS.CLEANUP_HTML,
     } = args;
 
-    log.info(`Fetching: ${url}, initialWait: ${initialWaitTime}ms, scrolls: ${scrollCount}, scrollWait: ${scrollWaitTime}ms, cleanup: ${cleanup}`);
+    log.info(`Fetching: ${url}, initialWait: ${initialWaitTime}ms, scrolls: ${scrolls}, scrollWait: ${scrollWaitTime}ms, cleanup: ${cleanup}`);
 
     let page: Page | null = null;
 
@@ -142,8 +151,8 @@ class BrowserlessServer {
       page = await this.createPage();
       await this.navigateToUrl(page, url);
       await this.waitForInitialLoad(initialWaitTime);
-      await this.performScrolling(page, scrollCount, scrollWaitTime);
-      await this.waitForNetworkAndRendering(page, scrollCount, scrollWaitTime);
+      await this.performScrolling(page, scrolls, scrollWaitTime);
+      await this.waitForNetworkAndRendering(page, scrolls, scrollWaitTime);
       
       const rawContent = await this.extractPageContent(page);
       const finalContent = cleanup ? this.cleanupHtml(rawContent) : rawContent;
@@ -157,15 +166,36 @@ class BrowserlessServer {
     }
   }
 
-  private async ensureBrowserConnection(): Promise<void> {
-    if (this.browser) return;
+  private async ensureBrowserConnection(): Promise<Browser> {
+    // Check if browser exists and is still connected
+    if (this.browser) {
+      try {
+        // Test if the connection is still alive by checking if browser is connected
+        if (this.browser.connected) {
+          return this.browser;
+        }
+        log.info('Browser connection was closed, reconnecting...');
+      } catch (error) {
+        log.info('Browser connection check failed, reconnecting...');
+      }
+      // Clear the stale connection
+      this.browser = null;
+    }
 
     log.info('Connecting to browserless.io...');
     try {
       this.browser = await puppeteer.connect({
         browserWSEndpoint: BROWSERLESS_WS_ENDPOINT,
       });
+      
+      // Handle unexpected disconnections
+      this.browser.on('disconnected', () => {
+        log.info('Browser disconnected by remote');
+        this.browser = null;
+      });
+      
       log.info('Connected successfully');
+      return this.browser;
     } catch (error) {
       log.error('Connection failed:', error);
       throw new Error(`Failed to connect to browserless.io: ${this.formatError(error)}`);
@@ -178,9 +208,27 @@ class BrowserlessServer {
     }
 
     log.info('Creating new page...');
-    const page = await this.browser.newPage();
-    log.info('Page created');
-    return page;
+    try {
+      const page = await this.browser.newPage();
+      log.info('Page created');
+      return page;
+    } catch (error) {
+      // If page creation fails due to connection issues, try reconnecting once
+      if (error instanceof Error && 
+          (error.message.includes('Connection closed') || 
+           error.message.includes('Target closed') ||
+           error.message.includes('Session closed'))) {
+        log.info('Page creation failed due to connection issue, reconnecting...');
+        this.browser = null;
+        const browser = await this.ensureBrowserConnection();
+        
+        // Create page with the new browser connection
+        const newPage = await browser.newPage();
+        log.info('Page created after reconnection');
+        return newPage;
+      }
+      throw error;
+    }
   }
 
   private async navigateToUrl(page: Page, url: string): Promise<void> {
@@ -205,28 +253,43 @@ class BrowserlessServer {
     }
   }
 
-  private async performScrolling(page: Page, scrollCount: number, scrollWaitTime: number): Promise<void> {
-    for (let i = 0; i < scrollCount; i++) {
+  private async performScrolling(page: Page, scrolls: number, scrollWaitTime: number): Promise<void> {
+    if (scrolls === 0) {
+      log.info('Scrolling skipped (scrolls = 0)');
+      return;
+    }
+
+    log.info(`Starting scrolling: ${scrolls} scroll(s)`);
+    
+    for (let i = 0; i < scrolls; i++) {
       if (page.isClosed()) {
         log.info('Page was closed, stopping scrolling');
         break;
       }
 
-      log.info(`Scrolling down (${i + 1}/${scrollCount})`);
+      log.info(`Scrolling down (${i + 1}/${scrolls})`);
       
       try {
         const previousHeight = await this.getScrollHeight(page);
+        log.info(`Current page height: ${previousHeight}px`);
+        
         await this.scrollToBottom(page);
         await this.sleep(TIMEOUTS.SCROLL_COMPLETION);
+        
+        const newHeight = await this.getScrollHeight(page);
+        log.info(`After scroll height: ${newHeight}px`);
+        
         await this.waitForNewContent(page, previousHeight, scrollWaitTime);
       } catch (error) {
         if (this.isPageDetachmentError(error)) {
           log.error('Page/Frame issue detected, stopping scrolling early');
           break;
         }
-        log.error(`Scroll error (${i + 1}/${scrollCount}):`, error);
+        log.error(`Scroll error (${i + 1}/${scrolls}):`, error);
       }
     }
+    
+    log.info(`Completed ${scrolls} scroll(s)`);
   }
 
   private async getScrollHeight(page: Page): Promise<number> {
@@ -241,10 +304,8 @@ class BrowserlessServer {
   private async scrollToBottom(page: Page): Promise<void> {
     try {
       await page.evaluate(() => {
-        window.scrollTo({
-          top: document.documentElement.scrollHeight,
-          behavior: 'smooth',
-        });
+        // Use instant scroll for better reliability in headless mode
+        window.scrollTo(0, document.documentElement.scrollHeight);
       });
     } catch (error) {
       log.info('Evaluate failed, using keyboard scroll');
@@ -278,9 +339,9 @@ class BrowserlessServer {
     }
   }
 
-  private async waitForNetworkAndRendering(page: Page, scrollCount: number, scrollWaitTime: number): Promise<void> {
+  private async waitForNetworkAndRendering(page: Page, scrolls: number, scrollWaitTime: number): Promise<void> {
     // Final wait after scrolling
-    if (scrollCount > 0 && scrollWaitTime > 0) {
+    if (scrolls > 0 && scrollWaitTime > 0) {
       log.info('Final wait after scrolling');
       await this.sleep(scrollWaitTime);
     }
@@ -423,8 +484,12 @@ class BrowserlessServer {
     log.info('Cleaning up...');
     if (this.browser) {
       try {
-        await this.browser.disconnect();
-        log.info('Browser disconnected');
+        if (this.browser.connected) {
+          await this.browser.disconnect();
+          log.info('Browser disconnected');
+        } else {
+          log.info('Browser already disconnected');
+        }
       } catch (error) {
         log.error('Error disconnecting browser:', error);
       }
