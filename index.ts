@@ -32,7 +32,8 @@ const TIMEOUTS = {
 const DEFAULTS = {
   INITIAL_WAIT: 3000,
   SCROLL_COUNT: 0,
-  SCROLL_WAIT: 3000,
+  SCROLL_WAIT: 1000,
+  CLEANUP_HTML: false,
 } as const;
 
 // Error Keywords for Page Detachment Detection
@@ -49,6 +50,7 @@ interface FetchWebContentArgs {
   initialWaitTime?: number;
   scrollCount?: number;
   scrollWaitTime?: number;
+  cleanup?: boolean;
 }
 
 // Simple logger utility
@@ -87,6 +89,7 @@ class BrowserlessServer {
           initialWaitTime: z.number().optional().default(DEFAULTS.INITIAL_WAIT).describe('Time to wait (in milliseconds) after loading the page before scrolling'),
           scrollCount: z.number().optional().default(DEFAULTS.SCROLL_COUNT).describe('Number of times to scroll down the page'),
           scrollWaitTime: z.number().optional().default(DEFAULTS.SCROLL_WAIT).describe('Time to wait (in milliseconds) between each scroll action'),
+          cleanup: z.boolean().optional().default(DEFAULTS.CLEANUP_HTML).describe('Whether to clean up HTML (remove scripts, styles, SVG, forms, etc.) and keep only meaningful text content'),
         },
       },
       async (args) => this.handleWebContentRequest(args)
@@ -127,9 +130,10 @@ class BrowserlessServer {
       initialWaitTime = DEFAULTS.INITIAL_WAIT,
       scrollCount = DEFAULTS.SCROLL_COUNT,
       scrollWaitTime = DEFAULTS.SCROLL_WAIT,
+      cleanup = DEFAULTS.CLEANUP_HTML,
     } = args;
 
-    log.info(`Fetching: ${url}, initialWait: ${initialWaitTime}ms, scrolls: ${scrollCount}, scrollWait: ${scrollWaitTime}ms`);
+    log.info(`Fetching: ${url}, initialWait: ${initialWaitTime}ms, scrolls: ${scrollCount}, scrollWait: ${scrollWaitTime}ms, cleanup: ${cleanup}`);
 
     let page: Page | null = null;
 
@@ -142,11 +146,11 @@ class BrowserlessServer {
       await this.waitForNetworkAndRendering(page, scrollCount, scrollWaitTime);
       
       const rawContent = await this.extractPageContent(page);
-      const cleanedContent = this.cleanupHtml(rawContent);
+      const finalContent = cleanup ? this.cleanupHtml(rawContent) : rawContent;
       await this.closePage(page);
       
       log.info('Content fetched successfully');
-      return cleanedContent;
+      return finalContent;
     } catch (error) {
       await this.closePage(page);
       throw error;
